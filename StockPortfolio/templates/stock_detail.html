@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ symbol }} — StockPortfolio{% endblock %}
+{% block page_title %}
+  <a href="{% url 'fe-dashboard-list' %}" class="text-muted-custom" style="font-size:13px;">Dashboard</a>
+  <span class="text-faint" style="font-size:13px;">/</span> {{ symbol }}
+{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<div id="detail-loading" class="row g-3">
+  <div class="col-12"><div class="skeleton" style="height:100px;"></div></div>
+  <div class="col-12"><div class="skeleton" style="height:260px;"></div></div>
+</div>
+
+<div id="detail-content" style="display:none;">
+
+  <div class="card-surface card-surface-pad mb-3">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stock-avatar" style="width:46px;height:46px;font-size:15px;" id="detail-avatar">—</div>
+        <div>
+          <div class="font-display" style="font-size:19px;font-weight:700;" id="detail-name">—</div>
+          <div class="text-muted-custom" style="font-size:12.5px;" id="detail-exchange">—</div>
+        </div>
+      </div>
+      <div class="text-end">
+        <div class="stat-label">Current price</div>
+        <div class="stat-value mono" id="detail-current-price">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3" id="holding-stats-row">
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Quantity held</div>
+        <div class="stat-value mono" id="stat-qty">—</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Average price</div>
+        <div class="stat-value mono" id="stat-avg">—</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Unrealized P&amp;L</div>
+        <div class="stat-value mono" id="stat-unrealized">—</div>
+        <div class="stat-delta" id="stat-unrealized-pct"></div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Realized P&amp;L (booked)</div>
+        <div class="stat-value mono" id="stat-realized">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="no-holding-note" class="card-surface card-surface-pad mb-3" style="display:none;">
+    <div class="d-flex align-items-center gap-2 text-muted-custom" style="font-size:13.5px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      You don&apos;t currently hold this stock — the trade history below shows a fully closed position.
+    </div>
+  </div>
+
+  <div class="card-surface card-surface-pad mb-3">
+    <div class="card-header-row">
+      <h2 class="card-title">Average price &amp; quantity over time</h2>
+      <span class="card-subtitle">How your position evolved with each buy/sell</span>
+    </div>
+    <canvas id="chart-avg" height="220"></canvas>
+  </div>
+
+  <div class="card-surface card-surface-pad">
+    <div class="card-header-row">
+      <h2 class="card-title">All trades for {{ symbol }}</h2>
+    </div>
+    <div class="table-scroll">
+      <table class="table-portfolio" id="table-trades">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Price</th>
+            <th class="text-end">Qty after</th>
+            <th class="text-end">Avg. after</th>
+            <th class="text-end">Realized P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="trades-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.STOCK_DETAIL = {
+    symbol: "{{ symbol }}",
+    holdingUrl: "{% url 'holdings-detail' pk=symbol %}",
+    tradesUrl: "{% url 'fe-trades-list' %}"
+  };
+</script>
+<script src="{% static 'js/stock_detail.js' %}"></script>
+{% endblock %}

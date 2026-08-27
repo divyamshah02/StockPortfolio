@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard — StockPortfolio{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<div id="dash-loading" class="row g-3 mb-1">
+  <div class="col-6 col-lg-3"><div class="skeleton" style="height:96px;"></div></div>
+  <div class="col-6 col-lg-3"><div class="skeleton" style="height:96px;"></div></div>
+  <div class="col-6 col-lg-3"><div class="skeleton" style="height:96px;"></div></div>
+  <div class="col-6 col-lg-3"><div class="skeleton" style="height:96px;"></div></div>
+</div>
+
+<div id="dash-content" style="display:none;">
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Total invested</div>
+        <div class="stat-value mono" id="stat-invested">—</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Current value</div>
+        <div class="stat-value mono" id="stat-current">—</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Unrealized P&amp;L</div>
+        <div class="stat-value mono" id="stat-unrealized">—</div>
+        <div class="stat-delta" id="stat-unrealized-pct"></div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card">
+        <div class="stat-label">Realized P&amp;L (booked)</div>
+        <div class="stat-value mono" id="stat-realized">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-4">
+      <div class="card-surface card-surface-pad h-100">
+        <div class="card-header-row">
+          <h2 class="card-title">Allocation</h2>
+        </div>
+        <div id="allocation-empty" class="empty-state" style="display:none;padding:36px 10px;">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/></svg>
+          <div>No open holdings yet</div>
+        </div>
+        <div style="max-width:260px;margin:0 auto;">
+          <canvas id="chart-allocation" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card-surface card-surface-pad h-100">
+        <div class="card-header-row">
+          <h2 class="card-title">Unrealized P&amp;L by stock</h2>
+          <span class="card-subtitle">Green = profit, red = loss on current holdings</span>
+        </div>
+        <canvas id="chart-pnl" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-surface card-surface-pad mb-3" id="holdings">
+    <div class="card-header-row">
+      <div>
+        <h2 class="card-title">Holdings</h2>
+        <div class="card-subtitle">Current open positions, averaged across every buy trade</div>
+      </div>
+      <a href="{% url 'fe-trades-list' %}" class="btn btn-primary btn-sm">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add trade
+      </a>
+    </div>
+    <div class="table-scroll">
+      <table class="table-portfolio" id="table-holdings">
+        <thead>
+          <tr>
+            <th>Stock</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Avg. price</th>
+            <th class="text-end">Current price</th>
+            <th class="text-end">Invested</th>
+            <th class="text-end">Current value</th>
+            <th class="text-end">Unrealized P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="holdings-tbody"></tbody>
+      </table>
+    </div>
+    <div id="holdings-empty" class="empty-state" style="display:none;">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-4 4"/></svg>
+      <div class="mb-2">You don&apos;t have any open holdings yet.</div>
+      <a href="{% url 'fe-trades-list' %}" class="btn btn-outline-custom btn-sm">Log your first trade</a>
+    </div>
+  </div>
+
+  <div class="card-surface card-surface-pad">
+    <div class="card-header-row">
+      <h2 class="card-title">Recent trades</h2>
+      <a href="{% url 'fe-trades-list' %}" class="btn btn-ghost btn-sm">View all</a>
+    </div>
+    <div class="table-scroll">
+      <table class="table-portfolio" id="table-recent-trades">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Stock</th>
+            <th>Type</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Price</th>
+            <th class="text-end">Realized P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="recent-trades-tbody"></tbody>
+      </table>
+    </div>
+    <div id="recent-trades-empty" class="empty-state" style="display:none;">
+      <div>No trades recorded yet.</div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.DASHBOARD_URLS = {
+    dashboard: "{% url 'dashboard-list' %}",
+    holdingsDetail: "{% url 'fe-holdings-detail' pk='__SYMBOL__' %}"
+  };
+</script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}
