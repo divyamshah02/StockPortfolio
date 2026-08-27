@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Scripts — StockPortfolio{% endblock %}
+{% block page_title %}Scripts{% endblock %}
+
+{% block content %}
+
+<div class="card-header-row mb-1">
+  <div>
+    <h2 class="card-title" style="font-size:17px;">Trading scripts</h2>
+    <div class="card-subtitle">Track which strategies you trade with, and how much each one is actually making or losing</div>
+  </div>
+  <button type="button" class="btn btn-primary" id="btn-open-new-script">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    New script
+  </button>
+</div>
+
+<div id="scripts-loading" class="skeleton" style="height:180px; margin-top:14px;"></div>
+
+<div class="row g-3 mt-1" id="scripts-grid" style="display:none;"></div>
+
+<div id="scripts-empty" class="empty-state" style="display:none;">
+  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+  <div>No scripts yet. Add one to start tagging your trades by strategy.</div>
+</div>
+
+<!-- Create / edit script modal -->
+<div class="modal fade" id="modal-script-form" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title font-display" id="script-form-title">New script</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="alert-script-error" class="alert-error"></div>
+        <input type="hidden" id="script-form-id">
+        <div class="mb-3">
+          <label class="form-label" for="script-name">Name</label>
+          <input type="text" id="script-name" class="form-control" placeholder="e.g. Breakout swing">
+        </div>
+        <div class="mb-1">
+          <label class="form-label" for="script-description">Description <span class="text-faint">(optional)</span></label>
+          <textarea id="script-description" class="form-control" rows="3" placeholder="What is this strategy / setup?"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-save-script">Save script</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete script confirm -->
+<div class="modal fade" id="modal-delete-script" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title font-display">Delete script?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        This removes the script itself. Trades already tagged with it keep their history but become untagged. This can&apos;t be undone.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sell" id="btn-confirm-delete-script">Delete script</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Script detail modal -->
+<div class="modal fade" id="modal-script-detail" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title font-display" id="detail-script-name">—</h5>
+          <div class="card-subtitle" id="detail-script-description">—</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3" id="detail-stat-cards"></div>
+
+        <div class="card-subtitle mb-2" style="text-transform:uppercase; font-size:11px; letter-spacing:.05em;">Per-stock breakdown</div>
+        <div class="table-scroll mb-4">
+          <table class="table-portfolio" id="table-detail-breakdown">
+            <thead>
+              <tr>
+                <th>Stock</th>
+                <th class="text-end">Open qty</th>
+                <th class="text-end">Avg. price</th>
+                <th class="text-end">Current price</th>
+                <th class="text-end">Unrealized P&amp;L</th>
+                <th class="text-end">Realized P&amp;L</th>
+                <th class="text-end">Trades</th>
+              </tr>
+            </thead>
+            <tbody id="detail-breakdown-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card-subtitle mb-2" style="text-transform:uppercase; font-size:11px; letter-spacing:.05em;">All trades under this script</div>
+        <div class="table-scroll">
+          <table class="table-portfolio" id="table-detail-trades">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Stock</th>
+                <th>Type</th>
+                <th class="text-end">Qty</th>
+                <th class="text-end">Price</th>
+                <th class="text-end">Realized P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody id="detail-trades-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" id="btn-detail-edit">Edit</button>
+        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.SCRIPTS_URLS = {
+    scripts: "{% url 'scripts-list' %}",
+    scriptDetail: "{% url 'scripts-detail' pk='__ID__' %}"
+  };
+</script>
+<script src="{% static 'js/scripts.js' %}"></script>
+{% endblock %}

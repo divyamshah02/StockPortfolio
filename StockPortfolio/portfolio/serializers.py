@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from .models import Holding, Stock, Trade
+from .models import Holding, Script, Stock, Trade
+
+
+class ScriptSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Script
+        fields = ("id", "name", "description", "created_at", "updated_at")
 
 
 class StockSerializer(serializers.ModelSerializer):
@@ -21,6 +27,7 @@ class StockSerializer(serializers.ModelSerializer):
 
 class TradeSerializer(serializers.ModelSerializer):
     stock_symbol = serializers.CharField(source="stock.symbol", read_only=True)
+    script_name = serializers.CharField(source="script.name", read_only=True, default=None)
 
     class Meta:
         model = Trade
@@ -28,6 +35,8 @@ class TradeSerializer(serializers.ModelSerializer):
             "id",
             "stock",
             "stock_symbol",
+            "script",
+            "script_name",
             "trade_type",
             "quantity",
             "price",

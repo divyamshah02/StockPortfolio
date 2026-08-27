@@ -2,12 +2,15 @@ let _csrfToken = null;
 let _selectedType = 'BUY';
 let _verifiedSymbol = null;
 let _allTrades = [];
+let _allScripts = [];
 let _deleteTargetId = null;
 let _deleteModal = null;
+let _newScriptModal = null;
 
 document.addEventListener('DOMContentLoaded', function () {
   _csrfToken = window.CSRF_TOKEN || '';
   _deleteModal = new bootstrap.Modal(document.getElementById('modal-delete-trade'));
+  _newScriptModal = new bootstrap.Modal(document.getElementById('modal-new-script'));
 
   document.getElementById('trade-date').value = new Date().toISOString().slice(0, 10);
 
@@ -26,13 +29,90 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  document.getElementById('btn-new-script-inline').addEventListener('click', function () {
+    document.getElementById('alert-new-script-error').classList.remove('show');
+    document.getElementById('new-script-name').value = '';
+    document.getElementById('new-script-description').value = '';
+    _newScriptModal.show();
+  });
+  document.getElementById('btn-save-new-script').addEventListener('click', saveNewScriptInline);
+
   document.getElementById('btn-submit-trade').addEventListener('click', submitTrade);
   document.getElementById('filter-symbol').addEventListener('change', applyFilters);
+  document.getElementById('filter-script').addEventListener('change', applyFilters);
   document.getElementById('filter-type').addEventListener('change', applyFilters);
   document.getElementById('btn-confirm-delete-trade').addEventListener('click', confirmDeleteTrade);
 
+  loadScripts();
   loadTrades();
 });
+
+async function loadScripts(selectId) {
+  var result = await callApi('GET', window.TRADES_URLS.scripts, null, _csrfToken);
+  var ok = result[0];
+  var data = result[1];
+
+  if (!ok || !data.success) return;
+
+  _allScripts = data.data.scripts || [];
+
+  var tradeSelect = document.getElementById('trade-script');
+  var currentTradeValue = tradeSelect.value;
+  tradeSelect.innerHTML = '<option value="">No script</option>';
+  _allScripts.forEach(function (s) {
+    var opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    tradeSelect.appendChild(opt);
+  });
+  tradeSelect.value = selectId != null ? String(selectId) : currentTradeValue;
+
+  var filterSelect = document.getElementById('filter-script');
+  var currentFilterValue = filterSelect.value;
+  filterSelect.innerHTML = '<option value="">All scripts</option>';
+  _allScripts.forEach(function (s) {
+    var opt = document.createElement('option');
+    opt.value = s.name;
+    opt.textContent = s.name;
+    filterSelect.appendChild(opt);
+  });
+  filterSelect.value = currentFilterValue;
+}
+
+async function saveNewScriptInline() {
+  var errEl = document.getElementById('alert-new-script-error');
+  errEl.classList.remove('show');
+
+  var name = document.getElementById('new-script-name').value.trim();
+  var description = document.getElementById('new-script-description').value.trim();
+
+  if (!name) {
+    errEl.textContent = 'Give this script a name.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  var btn = document.getElementById('btn-save-new-script');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-sm"></span> Saving...';
+
+  var result = await callApi('POST', window.TRADES_URLS.scripts, { name: name, description: description }, _csrfToken);
+  var ok = result[0];
+  var data = result[1];
+
+  btn.disabled = false;
+  btn.textContent = 'Save script';
+
+  if (!ok || !data.success) {
+    errEl.textContent = (data && data.error) || 'Could not save this script.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  _newScriptModal.hide();
+  showToast('Script "' + data.data.script.name + '" created.', 'success');
+  await loadScripts(data.data.script.id);
+}
 
 function setTradeType(type) {
   _selectedType = type;
@@ -98,6 +178,7 @@ async function submitTrade() {
   var price = document.getElementById('trade-price').value;
   var trade_date = document.getElementById('trade-date').value;
   var notes = document.getElementById('trade-notes').value.trim();
+  var script = document.getElementById('trade-script').value;
 
   if (!symbol) {
     showTradeError('Enter and check a stock symbol first.');
@@ -126,6 +207,7 @@ async function submitTrade() {
 
   var result = await callApi('POST', window.TRADES_URLS.trades, {
     symbol: symbol,
+    script: script || null,
     trade_type: _selectedType,
     quantity: quantity,
     price: price,
@@ -155,6 +237,7 @@ function resetTradeForm() {
   document.getElementById('trade-price').value = '';
   document.getElementById('trade-notes').value = '';
   document.getElementById('trade-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('trade-script').value = '';
   document.getElementById('check-price-box').classList.remove('show');
   _verifiedSymbol = null;
   setTradeType('BUY');
@@ -198,10 +281,12 @@ function populateSymbolFilter(trades) {
 
 function applyFilters() {
   var symbol = document.getElementById('filter-symbol').value;
+  var scriptName = document.getElementById('filter-script').value;
   var type = document.getElementById('filter-type').value;
 
   var filtered = _allTrades.filter(function (t) {
     if (symbol && t.stock_symbol !== symbol) return false;
+    if (scriptName && t.script_name !== scriptName) return false;
     if (type && t.trade_type !== type) return false;
     return true;
   });
@@ -228,6 +313,7 @@ function renderTrades(trades) {
     tr.innerHTML = `
       <td class="text-muted-custom">${escapeHtml(t.trade_date)}</td>
       <td class="fw-semibold">${escapeHtml(t.stock_symbol)}</td>
+      <td>${t.script_name ? '<span class="pill pill-neutral">' + escapeHtml(t.script_name) + '</span>' : '<span class="text-faint">—</span>'}</td>
       <td><span class="pill ${t.trade_type === 'BUY' ? 'pill-buy' : 'pill-sell'}">${t.trade_type}</span></td>
       <td class="text-end mono">${formatNumber(t.quantity)}</td>
       <td class="text-end mono">${formatMoney(t.price)}</td>

@@ -1,7 +1,39 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Holding, Stock, Trade
+from .models import Holding, Script, Stock, Trade
+from .services import script_performance
+
+
+@admin.register(Script)
+class ScriptAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "user",
+        "trade_count_display",
+        "realized_pnl_display",
+        "unrealized_pnl_display",
+        "updated_at",
+    )
+    search_fields = ("name", "user__email", "description")
+    ordering = ("name",)
+    readonly_fields = ("created_at", "updated_at")
+
+    @admin.display(description="Trades")
+    def trade_count_display(self, obj):
+        return script_performance(obj.user, obj)["trade_count"]
+
+    @admin.display(description="Realized P&L")
+    def realized_pnl_display(self, obj):
+        pnl = script_performance(obj.user, obj)["total_realized_pnl"]
+        color = "#16a34a" if pnl >= 0 else "#dc2626"
+        return format_html('<strong style="color: {}">₹{}</strong>', color, f"{pnl:,.2f}")
+
+    @admin.display(description="Unrealized P&L")
+    def unrealized_pnl_display(self, obj):
+        pnl = script_performance(obj.user, obj)["total_unrealized_pnl"]
+        color = "#16a34a" if pnl >= 0 else "#dc2626"
+        return format_html('<strong style="color: {}">₹{}</strong>', color, f"{pnl:,.2f}")
 
 
 @admin.register(Stock)
@@ -27,6 +59,7 @@ class TradeAdmin(admin.ModelAdmin):
         "trade_date",
         "user",
         "stock",
+        "script",
         "colored_trade_type",
         "quantity",
         "price",
@@ -35,8 +68,8 @@ class TradeAdmin(admin.ModelAdmin):
         "average_price_after_trade",
         "realized_pnl_display",
     )
-    list_filter = ("trade_type", "stock", "trade_date")
-    search_fields = ("user__email", "stock__symbol", "notes")
+    list_filter = ("trade_type", "stock", "script", "trade_date")
+    search_fields = ("user__email", "stock__symbol", "script__name", "notes")
     date_hierarchy = "trade_date"
     ordering = ("-trade_date", "-created_at")
     autocomplete_fields = ("stock",)
@@ -48,7 +81,7 @@ class TradeAdmin(admin.ModelAdmin):
         "updated_at",
     )
     fieldsets = (
-        (None, {"fields": ("user", "stock", "trade_type", "quantity", "price", "trade_date", "notes")}),
+        (None, {"fields": ("user", "stock", "script", "trade_type", "quantity", "price", "trade_date", "notes")}),
         (
             "Snapshot (auto-calculated, read-only)",
             {"fields": ("quantity_after_trade", "average_price_after_trade", "realized_pnl")},

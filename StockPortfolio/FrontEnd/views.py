@@ -86,6 +86,14 @@ class TradesViewSet(viewsets.ViewSet):
         return render(request, "trades.html", {"active_page": "trades"})
 
 
+class ScriptsViewSet(viewsets.ViewSet):
+
+    @handle_exceptions
+    @fe_check_auth()
+    def list(self, request):
+        return render(request, "scripts.html", {"active_page": "scripts"})
+
+
 class StockDetailViewSet(viewsets.ViewSet):
     """URL: /holdings/<symbol>/ — full trade history + running average for
     a single stock."""

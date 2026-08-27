@@ -41,6 +41,32 @@ class Stock(models.Model):
         return f"{self.symbol} ({self.exchange})"
 
 
+class Script(models.Model):
+    """A trading strategy/system the user follows (e.g. "Breakout swing",
+    "Momentum scalper"). Trades are optionally tagged with the script that
+    generated them, so the user can see which strategies are actually
+    profitable and which ones are losing money."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="scripts"
+    )
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "scripts"
+        unique_together = ("user", "name")
+        ordering = ["name"]
+        verbose_name = "Script"
+        verbose_name_plural = "Scripts"
+
+    def __str__(self):
+        return f"{self.name} ({self.user})"
+
+
 class Trade(models.Model):
     """A single buy/sell execution entered by the user.
 
@@ -61,6 +87,14 @@ class Trade(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="trades"
     )
     stock = models.ForeignKey(Stock, on_delete=models.PROTECT, related_name="trades")
+    script = models.ForeignKey(
+        Script,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trades",
+        help_text="Which trading script/strategy this trade belongs to (optional).",
+    )
 
     trade_type = models.CharField(max_length=4, choices=TRADE_TYPE_CHOICES)
     quantity = models.PositiveIntegerField()

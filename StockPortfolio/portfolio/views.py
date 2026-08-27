@@ -10,8 +10,9 @@ from rest_framework.response import Response
 from utils.decorators import check_authentication, handle_exceptions
 
 from .market_data import fetch_quote, get_or_refresh_stock
-from .models import Holding, Stock, Trade
-from .serializers import HoldingSerializer, StockSerializer, TradeSerializer
+from .models import Holding, Script, Stock, Trade
+from .serializers import HoldingSerializer, ScriptSerializer, StockSerializer, TradeSerializer
+from .services import script_performance
 
 
 def _ok(data, code=status.HTTP_200_OK):
@@ -125,6 +126,119 @@ class StockViewSet(viewsets.ViewSet):
 
 
 # ---------------------------------------------------------------------------
+# Scripts — trading strategies the user tags trades with, so performance can
+# be compared strategy-by-strategy.
+# ---------------------------------------------------------------------------
+
+def _script_summary(script, perf):
+    """Flattens a Script + its script_performance() result into the shape
+    used by the scripts list/detail pages (avoids repeating this in every
+    action below)."""
+    return {
+        "id": script.id,
+        "name": script.name,
+        "description": script.description,
+        "created_at": script.created_at,
+        "trade_count": perf["trade_count"],
+        "total_invested": float(perf["total_invested"]),
+        "total_current_value": float(perf["total_current_value"]),
+        "total_realized_pnl": float(perf["total_realized_pnl"]),
+        "total_unrealized_pnl": float(perf["total_unrealized_pnl"]),
+        "total_pnl": float(perf["total_realized_pnl"] + perf["total_unrealized_pnl"]),
+        "has_missing_price": perf["has_missing_price"],
+        "stocks_traded": len(perf["stock_breakdown"]),
+    }
+
+
+class ScriptViewSet(viewsets.ViewSet):
+
+    @handle_exceptions
+    @check_authentication()
+    def list(self, request):
+        """GET /portfolio-api/scripts/ — every script for this user, each with
+        a performance summary (trade count, invested, realized/unrealized P&L)
+        so the Scripts page can render its list + comparison in one call."""
+        scripts = Script.objects.filter(user=request.user).order_by("name")
+        summaries = [_script_summary(s, script_performance(request.user, s)) for s in scripts]
+        return _ok({"scripts": summaries})
+
+    @handle_exceptions
+    @check_authentication()
+    def retrieve(self, request, pk=None):
+        """GET /portfolio-api/scripts/<id>/ — full detail for the "show more"
+        view: the performance summary, a per-stock breakdown, and every trade
+        tagged with this script."""
+        script = Script.objects.filter(pk=pk, user=request.user).first()
+        if not script:
+            return _fail("Script not found.", status.HTTP_404_NOT_FOUND)
+
+        perf = script_performance(request.user, script)
+        breakdown = []
+        for row in perf["stock_breakdown"]:
+            breakdown.append({
+                **{k: v for k, v in row.items() if k not in ("average_price", "total_invested", "current_price", "current_value", "unrealized_pnl", "realized_pnl")},
+                "average_price": float(row["average_price"]),
+                "total_invested": float(row["total_invested"]),
+                "current_price": float(row["current_price"]) if row["current_price"] is not None else None,
+                "current_value": float(row["current_value"]) if row["current_value"] is not None else None,
+                "unrealized_pnl": float(row["unrealized_pnl"]) if row["unrealized_pnl"] is not None else None,
+                "realized_pnl": float(row["realized_pnl"]),
+            })
+
+        return _ok({
+            "script": _script_summary(script, perf),
+            "stock_breakdown": breakdown,
+            "trades": TradeSerializer(perf["trades"], many=True).data,
+        })
+
+    @handle_exceptions
+    @check_authentication()
+    def create(self, request):
+        """POST {name, description?} — also used by the "add new script"
+        shortcut on the trade form."""
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return _fail("name is required.")
+
+        if Script.objects.filter(user=request.user, name__iexact=name).exists():
+            return _fail(f"You already have a script named '{name}'.")
+
+        script = Script.objects.create(
+            user=request.user,
+            name=name,
+            description=(request.data.get("description") or "").strip(),
+        )
+        return _ok({"script": ScriptSerializer(script).data}, status.HTTP_201_CREATED)
+
+    @handle_exceptions
+    @check_authentication()
+    def update(self, request, pk=None):
+        script = Script.objects.filter(pk=pk, user=request.user).first()
+        if not script:
+            return _fail("Script not found.", status.HTTP_404_NOT_FOUND)
+
+        name = (request.data.get("name") or script.name).strip()
+        if not name:
+            return _fail("name is required.")
+        if Script.objects.filter(user=request.user, name__iexact=name).exclude(pk=script.pk).exists():
+            return _fail(f"You already have a script named '{name}'.")
+
+        script.name = name
+        script.description = request.data.get("description", script.description)
+        script.save()
+        return _ok({"script": ScriptSerializer(script).data})
+
+    @handle_exceptions
+    @check_authentication()
+    def destroy(self, request, pk=None):
+        script = Script.objects.filter(pk=pk, user=request.user).first()
+        if not script:
+            return _fail("Script not found.", status.HTTP_404_NOT_FOUND)
+        script.delete()  # trades keep their history; Trade.script is SET_NULL
+        return _ok({"deleted": True})
+
+
+# ---------------------------------------------------------------------------
 # Trades — full history, add / edit / delete a buy or sell
 # ---------------------------------------------------------------------------
 
@@ -188,6 +302,13 @@ class TradeViewSet(viewsets.ViewSet):
         if not stock:
             return _fail(f"Could not verify '{symbol}'. Use the check button first.", status.HTTP_404_NOT_FOUND)
 
+        script = None
+        script_id = request.data.get("script")
+        if script_id:
+            script = Script.objects.filter(pk=script_id, user=request.user).first()
+            if not script:
+                return _fail("Selected script was not found.")
+
         if trade_type == "SELL":
             holding = Holding.objects.filter(user=request.user, stock=stock).first()
             available = holding.quantity if holding else 0
@@ -199,6 +320,7 @@ class TradeViewSet(viewsets.ViewSet):
         trade = Trade.objects.create(
             user=request.user,
             stock=stock,
+            script=script,
             trade_type=trade_type,
             quantity=quantity,
             price=price,
@@ -238,6 +360,16 @@ class TradeViewSet(viewsets.ViewSet):
             trade_date = _parse_date(trade_date_raw, "trade_date") if trade_date_raw else trade.trade_date
         except ValueError as exc:
             return _fail(str(exc))
+
+        if "script" in request.data:
+            script_id = request.data.get("script")
+            if script_id:
+                script = Script.objects.filter(pk=script_id, user=request.user).first()
+                if not script:
+                    return _fail("Selected script was not found.")
+                trade.script = script
+            else:
+                trade.script = None
 
         trade.trade_type = trade_type
         trade.quantity = quantity

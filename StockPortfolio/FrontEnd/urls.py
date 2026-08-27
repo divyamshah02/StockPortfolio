@@ -6,6 +6,7 @@ from .views import (
     DashboardViewSet,
     LoginViewSet,
     LogoutViewSet,
+    ScriptsViewSet,
     StockDetailViewSet,
     TradesViewSet,
 )
@@ -17,6 +18,7 @@ router.register(r"login", LoginViewSet, basename="fe-login")
 router.register(r"logout", LogoutViewSet, basename="fe-logout")
 router.register(r"dashboard", DashboardViewSet, basename="fe-dashboard")
 router.register(r"trades", TradesViewSet, basename="fe-trades")
+router.register(r"scripts", ScriptsViewSet, basename="fe-scripts")
 router.register(r"holdings", StockDetailViewSet, basename="fe-holdings")
 
 urlpatterns = [

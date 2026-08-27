@@ -5,6 +5,14 @@
     document.documentElement.setAttribute("data-theme", theme);
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", theme === "light" ? "#f5f6f8" : "#0a0e14");
+    if (theme === "light") {
+      document.getElementById("theme-icon-light").style.display = "none"
+      document.getElementById("theme-icon-dark").style.display = "inline-flex"
+    }
+    else {
+      document.getElementById("theme-icon-light").style.display = "inline-flex"
+      document.getElementById("theme-icon-dark").style.display = "none"
+    }
   }
 
   function toggleTheme() {
